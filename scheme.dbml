@@ -1,0 +1,88 @@
+// NUSA Nutrition - Database schema (DBML)
+// Generated from api_doc.md
+// Docs: https://dbml.dbdiagram.io/docs
+
+Table users {
+  id varchar [primary key, note: 'UUID']
+  name varchar [not null]
+  email varchar [not null]
+  role varchar [not null, note: 'e.g. user, admin']
+  avatar_url varchar
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table user_profiles {
+  id integer [primary key]
+  user_id varchar [not null, unique]
+  age integer
+  gender varchar
+  height_cm decimal
+  weight_kg decimal
+  target_weight_kg decimal
+  activity_level varchar
+  weight_goal varchar
+  daily_targets json [note: 'calories, protein_g, carbs_g, fat_g']
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table foods {
+  id varchar [primary key, note: 'UUID']
+  name varchar [not null]
+  brand varchar
+  source varchar [not null, note: 'manual | verified']
+  image_url varchar
+  calories_per_100g decimal
+  protein_per_100g decimal
+  carbs_per_100g decimal
+  fat_per_100g decimal
+  created_by_user_id varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table scans {
+  id varchar [primary key, note: 'UUID']
+  user_id varchar [not null]
+  upload_url varchar
+  status varchar
+  created_at timestamp
+}
+
+Table food_logs {
+  id varchar [primary key, note: 'UUID']
+  user_id varchar [not null]
+  food_id varchar [not null]
+  scan_id varchar [note: 'nullable, set when created from scan']
+  meal_type varchar [not null, note: 'breakfast | lunch | dinner | snack']
+  serving_weight_g decimal [not null]
+  notes text
+  health_score decimal
+  calculated json [note: 'calories, protein_g, carbs_g, fat_g']
+  logged_at timestamp
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table user_quota {
+  id integer [primary key]
+  user_id varchar [not null, unique]
+  plan varchar [note: 'e.g. Free']
+  scans_used integer [default: 0]
+  scans_limit integer
+  resets_at timestamp
+  is_grace_period boolean [default: false]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Refs: many-to-one (child > parent)
+Ref: user_profiles.user_id > users.id
+Ref: foods.created_by_user_id > users.id
+Ref: scans.user_id > users.id
+Ref: food_logs.user_id > users.id
+Ref: food_logs.food_id > foods.id
+Ref: food_logs.scan_id > scans.id
+Ref: user_quota.user_id > users.id
