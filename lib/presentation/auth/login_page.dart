@@ -25,9 +25,15 @@ class _LoginPageState extends State<LoginPage> {
     final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please fill all fields',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -63,24 +69,18 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } else {
-      String errorMsg = response.message;
-      if (response.error != null) {
-        if (response.error is Map) {
-          final errMap = response.error as Map;
-          if (errMap.containsKey('detail')) {
-            errorMsg = errMap['detail'].toString();
-          } else {
-            errorMsg = errMap.toString();
-          }
-        } else {
-          errorMsg = response.error.toString();
-        }
-      }
+      final errorMsg = response.readableErrorMessage;
       debugPrint('Login Error: $errorMsg');
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Login Failed: $errorMsg')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Login Failed: $errorMsg',
+            style: const TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -180,7 +180,7 @@ class _LoginPageState extends State<LoginPage> {
                       child: const Text(
                         'Sign up',
                         style: TextStyle(
-                          color: AppTheme.redAccent,
+                          color: AppTheme.blueAccent,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

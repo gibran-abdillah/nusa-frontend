@@ -15,7 +15,9 @@ const List<MapEntry<String, String>> kActivityLevels = [
 ];
 
 class GoalsPage extends StatefulWidget {
-  const GoalsPage({Key? key}) : super(key: key);
+  final bool visible;
+
+  const GoalsPage({Key? key, this.visible = false}) : super(key: key);
 
   @override
   State<GoalsPage> createState() => _GoalsPageState();
@@ -25,6 +27,7 @@ class _GoalsPageState extends State<GoalsPage> {
   final _profileDataSource = ProfileRemoteDataSource();
 
   bool _isLoading = true;
+  bool _hasFetched = false;
   bool _isSaving = false;
   String? _errorMessage;
   UserProfile? _profile;
@@ -58,7 +61,15 @@ class _GoalsPageState extends State<GoalsPage> {
     _targetWeightController = TextEditingController(text: '75');
     _ageController = TextEditingController(text: '25');
     _heightController = TextEditingController(text: '170');
-    _loadProfile();
+  }
+
+  @override
+  void didUpdateWidget(covariant GoalsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.visible && !_hasFetched) {
+      _hasFetched = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadProfile());
+    }
   }
 
   @override
@@ -353,6 +364,20 @@ class _GoalsPageState extends State<GoalsPage> {
 
   Widget _buildCalorieTargetCard() {
     final targetCal = _dailyTargets['calories'] ?? 2000.0;
+    final tdeeVal = GoalsCalculator.tdee(
+      weightKg: _weightKg,
+      heightCm: _heightCm,
+      age: _age,
+      activityLevel: _activityLevel,
+      isFemale: (_profile?.gender ?? 'male').toString().toLowerCase() == 'female',
+    );
+    final daysToGoal = GoalsCalculator.estimatedDaysToTargetWeight(
+      currentWeightKg: _weightKg,
+      targetWeightKg: _targetWeightKg,
+      targetCaloriesPerDay: targetCal,
+      tdeeValue: tdeeVal,
+      weightGoal: _weightGoal,
+    );
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -406,11 +431,11 @@ class _GoalsPageState extends State<GoalsPage> {
             ),
           ),
           const SizedBox(width: 24),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Daily Calorie\nTarget',
                   style: TextStyle(
                     fontSize: 18,
@@ -418,11 +443,22 @@ class _GoalsPageState extends State<GoalsPage> {
                     color: AppTheme.textBlack,
                   ),
                 ),
-                SizedBox(height: 8),
-                Text(
+                const SizedBox(height: 8),
+                const Text(
                   'Based on BMR, activity level and weight goal.',
                   style: TextStyle(fontSize: 13, color: AppTheme.textGrey),
                 ),
+                if (daysToGoal != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '~$daysToGoal days to reach ${_targetWeightKg.toStringAsFixed(0)} kg',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -775,25 +811,26 @@ class _GoalsPageState extends State<GoalsPage> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Target Weight',
+        if (_weightGoal != 'maintain') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Target Weight',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -872,6 +909,7 @@ class _GoalsPageState extends State<GoalsPage> {
             ],
           ),
         ),
+        ],
       ],
     );
   }
@@ -928,7 +966,7 @@ class _GoalsPageState extends State<GoalsPage> {
             : Icons.bolt;
         final color = key == 'sedentary'
             ? AppTheme.blueAccent
-            : key == 'light'
+            : key == 'lightly_active'
             ? AppTheme.redAccent
             : key == 'moderate'
             ? AppTheme.greenAccent

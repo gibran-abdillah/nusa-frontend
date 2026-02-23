@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import 'home/home_page.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'trends/trends_page.dart';
 import 'goals/goals_page.dart';
 import 'settings/settings_page.dart';
@@ -20,18 +21,20 @@ class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
   final GlobalKey<HomePageState> _homeKey = GlobalKey<HomePageState>();
 
-  late final List<Widget> _pages = [
-    HomePage(key: _homeKey),
-    const TrendsPage(),
-    const GoalsPage(),
-    const SettingsPage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
-    final showFab = _currentIndex == 0 || _currentIndex == 1; // Home, Trends only
+    final showFab =
+        _currentIndex == 0 || _currentIndex == 1; // Home, Trends only
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _pages),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          HomePage(key: _homeKey, visible: _currentIndex == 0),
+          TrendsPage(key: const ValueKey('trends'), visible: _currentIndex == 1),
+          GoalsPage(key: const ValueKey('goals'), visible: _currentIndex == 2),
+          SettingsPage(visible: _currentIndex == 3),
+        ],
+      ),
       floatingActionButton: showFab
           ? FloatingActionButton(
               onPressed: () => _showAddFoodOptions(context),
@@ -173,6 +176,18 @@ class _MainWrapperState extends State<MainWrapper> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
+    if (source == ImageSource.gallery) {
+      if (Theme.of(context).platform == TargetPlatform.android) {
+        final status = await Permission.photos.request();
+        if (status.isDenied) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gallery permission is required')),
+          );
+          return;
+        }
+      }
+    }
+
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: source,

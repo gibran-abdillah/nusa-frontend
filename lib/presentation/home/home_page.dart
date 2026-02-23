@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../core/token_storage.dart';
 import '../../data/datasources/home_remote_datasource.dart';
-import '../../data/datasources/profile_remote_datasource.dart';
 import '../../data/models/api_models.dart';
 import '../auth/login_page.dart';
 import '../details/details_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  final bool visible;
+
+  const HomePage({Key? key, this.visible = true}) : super(key: key);
 
   @override
   State<HomePage> createState() => HomePageState();
@@ -16,11 +17,9 @@ class HomePage extends StatefulWidget {
 
 class HomePageState extends State<HomePage> {
   final _homeDataSource = HomeRemoteDataSource();
-  final _profileDataSource = ProfileRemoteDataSource();
 
   bool _isLoading = true;
   FullDailySummary? _summary;
-  UserProfile? _profile;
   List<FoodLog> _logs = [];
 
   DateTime _selectedDate = DateTime.now();
@@ -42,13 +41,13 @@ class HomePageState extends State<HomePage> {
     return value.toStringAsFixed(1);
   }
 
+  /// Fetches only what Summary needs: daily summary + logs for the selected date.
   Future<void> _fetchData() async {
     setState(() {
       _isLoading = true;
     });
 
     final dateStr = _formatDateForApi(_selectedDate);
-    final userId = await TokenStorage.getUserId();
 
     final summaryRes = await _homeDataSource.getDailySummary(dateStr);
 
@@ -75,18 +74,9 @@ class HomePageState extends State<HomePage> {
       return;
     }
 
-    UserProfile? profile;
-    if (userId != null && userId.isNotEmpty) {
-      final profileRes = await _profileDataSource.getProfile(userId);
-      if (profileRes.success && profileRes.data != null) {
-        profile = profileRes.data;
-      }
-    }
-
     if (mounted) {
       setState(() {
         _summary = summaryRes.data;
-        _profile = profile;
         _logs = logsRes.data ?? [];
         _isLoading = false;
       });
@@ -114,38 +104,37 @@ class HomePageState extends State<HomePage> {
       'fat_g': _numFrom(consumed['fat_g'], 0),
     };
 
-    final profileTargets = _profile?.dailyTargets;
-    final hasProfileTargets = profileTargets != null &&
-        profileTargets.isNotEmpty &&
-        profileTargets['calories'] != null &&
-        (profileTargets['calories'] is num) &&
-        (profileTargets['calories'] as num) > 0;
-
+    final summaryTargets = _summary?.targets;
     final targets = {
-      'calories': hasProfileTargets
-          ? _numFrom(profileTargets!['calories'], 2000)
-          : _numFrom(_summary?.targets['calories'], 2000),
-      'protein_g': hasProfileTargets
-          ? _numFrom(profileTargets!['protein_g'], 100)
-          : _numFrom(_summary?.targets['protein_g'], 100),
-      'carbs_g': hasProfileTargets
-          ? _numFrom(profileTargets!['carbs_g'], 200)
-          : _numFrom(_summary?.targets['carbs_g'], 200),
-      'fat_g': hasProfileTargets
-          ? _numFrom(profileTargets!['fat_g'], 65)
-          : _numFrom(_summary?.targets['fat_g'], 65),
+      'calories': _numFrom(summaryTargets?['calories'], 2000),
+      'protein_g': _numFrom(summaryTargets?['protein_g'], 100),
+      'carbs_g': _numFrom(summaryTargets?['carbs_g'], 200),
+      'fat_g': _numFrom(summaryTargets?['fat_g'], 65),
     };
 
     final calTarget = targets['calories']! > 0 ? targets['calories']! : 2000.0;
-    final proteinTarget = targets['protein_g']! > 0 ? targets['protein_g']! : 100.0;
+    final proteinTarget = targets['protein_g']! > 0
+        ? targets['protein_g']!
+        : 100.0;
     final carbsTarget = targets['carbs_g']! > 0 ? targets['carbs_g']! : 200.0;
     final fatTarget = targets['fat_g']! > 0 ? targets['fat_g']! : 65.0;
 
     final progress = {
-      'calories': calTarget > 0 ? (summaryItems['calories']! / calTarget).clamp(0.0, 1.0) : 0.0,
-      'protein_pct': proteinTarget > 0 ? ((summaryItems['protein_g']! / proteinTarget) * 100).clamp(0.0, 100.0) : 0.0,
-      'carbs_pct': carbsTarget > 0 ? ((summaryItems['carbs_g']! / carbsTarget) * 100).clamp(0.0, 100.0) : 0.0,
-      'fat_pct': fatTarget > 0 ? ((summaryItems['fat_g']! / fatTarget) * 100).clamp(0.0, 100.0) : 0.0,
+      'calories': calTarget > 0
+          ? (summaryItems['calories']! / calTarget).clamp(0.0, 1.0)
+          : 0.0,
+      'protein_pct': proteinTarget > 0
+          ? ((summaryItems['protein_g']! / proteinTarget) * 100).clamp(
+              0.0,
+              100.0,
+            )
+          : 0.0,
+      'carbs_pct': carbsTarget > 0
+          ? ((summaryItems['carbs_g']! / carbsTarget) * 100).clamp(0.0, 100.0)
+          : 0.0,
+      'fat_pct': fatTarget > 0
+          ? ((summaryItems['fat_g']! / fatTarget) * 100).clamp(0.0, 100.0)
+          : 0.0,
     };
 
     const double kMaxContentWidth = 520.0;
@@ -173,86 +162,83 @@ class HomePageState extends State<HomePage> {
                         vertical: 20,
                       ),
                       children: [
-                    const Text(
-                      'NUSA',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.textBlack,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    _buildCalorieCard(
-                      summaryItems['calories']!,
-                      calTarget,
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: _buildMacroCard(
-                            'Protein',
-                            '${summaryItems['protein_g']!.round()} / ${proteinTarget.round()}g',
-                            AppTheme.blueAccent,
-                            Icons.lunch_dining,
-                            (progress['protein_pct'] as num) / 100.0,
+                        const Text(
+                          'NUSA',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textBlack,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildMacroCard(
-                            'Carbs',
-                            '${summaryItems['carbs_g']!.round()} / ${carbsTarget.round()}g',
-                            AppTheme.greenAccent,
-                            Icons.rice_bowl,
-                            (progress['carbs_pct'] as num) / 100.0,
+                        const SizedBox(height: 24),
+                        _buildCalorieCard(summaryItems['calories']!, calTarget),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: _buildMacroCard(
+                                'Protein',
+                                '${summaryItems['protein_g']!.round()} / ${proteinTarget.round()}g',
+                                AppTheme.blueAccent,
+                                Icons.lunch_dining,
+                                (progress['protein_pct'] as num) / 100.0,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildMacroCard(
+                                'Carbs',
+                                '${summaryItems['carbs_g']!.round()} / ${carbsTarget.round()}g',
+                                AppTheme.greenAccent,
+                                Icons.rice_bowl,
+                                (progress['carbs_pct'] as num) / 100.0,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildMacroCard(
+                                'Fat',
+                                '${summaryItems['fat_g']!.round()} / ${fatTarget.round()}g',
+                                AppTheme.redAccent,
+                                Icons.water_drop,
+                                (progress['fat_pct'] as num) / 100.0,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 32),
+                        _buildDateSelector(),
+                        const SizedBox(height: 32),
+                        const Text(
+                          'Recently Uploaded',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textBlack,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildMacroCard(
-                            'Fat',
-                            '${summaryItems['fat_g']!.round()} / ${fatTarget.round()}g',
-                            AppTheme.redAccent,
-                            Icons.water_drop,
-                            (progress['fat_pct'] as num) / 100.0,
-                          ),
-                        ),
+                        const SizedBox(height: 16),
+                        if (_logs.isEmpty)
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Text(
+                                'No food logged today.',
+                                style: TextStyle(color: AppTheme.textGrey),
+                              ),
+                            ),
+                          )
+                        else
+                          ..._logs.take(3).map((log) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: _buildRecentUploadCard(log, context),
+                            );
+                          }).toList(),
+                        const SizedBox(height: 80),
                       ],
                     ),
-                    const SizedBox(height: 32),
-                    _buildDateSelector(),
-                    const SizedBox(height: 32),
-                    const Text(
-                      'Recently Uploaded',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textBlack,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_logs.isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Text(
-                            'No food logged today.',
-                            style: TextStyle(color: AppTheme.textGrey),
-                          ),
-                        ),
-                      )
-                    else
-                      ..._logs.take(3).map((log) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: _buildRecentUploadCard(log, context),
-                        );
-                      }).toList(),
-                    const SizedBox(height: 80),
-                  ],
-                ),
             ),
           ),
         ),
@@ -335,17 +321,11 @@ class HomePageState extends State<HomePage> {
       const SizedBox(height: 20),
       Row(
         children: [
-          Expanded(
-            child: _buildSkeletonMacroCard(skeletonColor),
-          ),
+          Expanded(child: _buildSkeletonMacroCard(skeletonColor)),
           const SizedBox(width: 12),
-          Expanded(
-            child: _buildSkeletonMacroCard(skeletonColor),
-          ),
+          Expanded(child: _buildSkeletonMacroCard(skeletonColor)),
           const SizedBox(width: 12),
-          Expanded(
-            child: _buildSkeletonMacroCard(skeletonColor),
-          ),
+          Expanded(child: _buildSkeletonMacroCard(skeletonColor)),
         ],
       ),
       const SizedBox(height: 32),
@@ -412,10 +392,7 @@ class HomePageState extends State<HomePage> {
               Container(
                 width: 24,
                 height: 24,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
             ],
           ),
@@ -519,6 +496,9 @@ class HomePageState extends State<HomePage> {
   }
 
   Widget _buildCalorieCard(num current, num target) {
+    final progress = (target > 0)
+        ? (current.toDouble() / target.toDouble()).clamp(0.0, 1.0)
+        : 0.0;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -587,13 +567,13 @@ class HomePageState extends State<HomePage> {
               fit: StackFit.expand,
               children: [
                 CircularProgressIndicator(
-                  value: current / target,
+                  value: progress,
                   strokeWidth: 8,
                   backgroundColor: AppTheme.dividerColor,
                   color: AppTheme.redAccent,
                   strokeCap: StrokeCap.round,
                 ),
-                const Center(
+                Center(
                   child: Icon(
                     Icons.local_fire_department,
                     color: AppTheme.redAccent,

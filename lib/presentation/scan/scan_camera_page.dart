@@ -1,8 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../data/datasources/scan_remote_datasource.dart';
 import '../details/details_page.dart';
+
+const List<String> _kStatusMessages = [
+  '📸 Preparing image...',
+  '🚀 Uploading image...',
+  '🔍 Analyzing food...',
+  '✨ Doing some magic...',
+  '🥗 Identifying ingredients...',
+  '🔢 Counting calories...',
+  '⏳ Almost there...',
+];
 
 class ScanCameraPage extends StatefulWidget {
   final String imagePath;
@@ -18,14 +29,34 @@ class _ScanCameraPageState extends State<ScanCameraPage> {
   String _mealType = 'lunch';
   bool _isLoading = false;
   String _statusText = '';
+  int _statusIndex = 0;
+  Timer? _statusTimer;
 
   final List<String> _mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+  void _startStatusRotation() {
+    _statusIndex = 0;
+    _statusText = _kStatusMessages[0];
+    _statusTimer?.cancel();
+    _statusTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
+      if (!mounted) return;
+      _statusIndex = (_statusIndex + 1) % _kStatusMessages.length;
+      setState(() {
+        _statusText = _kStatusMessages[_statusIndex];
+      });
+    });
+  }
+
+  void _stopStatusRotation() {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+  }
 
   Future<void> _processImage() async {
     setState(() {
       _isLoading = true;
-      _statusText = 'Uploading image...';
     });
+    _startStatusRotation();
 
     final file = File(widget.imagePath);
 
@@ -35,14 +66,12 @@ class _ScanCameraPageState extends State<ScanCameraPage> {
     );
 
     if (!prepareRes.success || prepareRes.data == null) {
+      _stopStatusRotation();
       _showError('Failed to prepare scan: ${prepareRes.message}');
       return;
     }
 
     if (!mounted) return;
-    setState(() {
-      _statusText = 'Analyzing food...';
-    });
 
     final scanId = prepareRes.data!.scanId;
 
@@ -54,6 +83,7 @@ class _ScanCameraPageState extends State<ScanCameraPage> {
 
     if (!mounted) return;
 
+    _stopStatusRotation();
     setState(() {
       _isLoading = false;
     });
@@ -81,6 +111,7 @@ class _ScanCameraPageState extends State<ScanCameraPage> {
 
   void _showError(String msg) {
     if (mounted) {
+      _stopStatusRotation();
       setState(() {
         _isLoading = false;
       });
@@ -88,6 +119,12 @@ class _ScanCameraPageState extends State<ScanCameraPage> {
         SnackBar(content: Text(msg), backgroundColor: AppTheme.redAccent),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    super.dispose();
   }
 
   @override

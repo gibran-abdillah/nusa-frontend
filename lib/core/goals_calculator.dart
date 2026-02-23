@@ -94,6 +94,39 @@ class GoalsCalculator {
     };
   }
 
+  /// Approximate kcal to lose or gain 1 kg body weight (research range ~7000–7800).
+  static const double kcalPerKgBodyWeight = 7700;
+
+  /// Estimated days to reach target weight at the given daily calorie target.
+  /// Returns null for "maintain" or when estimate is not meaningful (e.g. no deficit/surplus).
+  static int? estimatedDaysToTargetWeight({
+    required num currentWeightKg,
+    required num targetWeightKg,
+    required double targetCaloriesPerDay,
+    required double tdeeValue,
+    required String weightGoal,
+  }) {
+    final goal = weightGoal.toLowerCase();
+    if (goal == 'maintain') return null;
+
+    if (goal == 'lose') {
+      final kgToLose = currentWeightKg.toDouble() - targetWeightKg.toDouble();
+      if (kgToLose <= 0) return null;
+      final dailyDeficit = tdeeValue - targetCaloriesPerDay;
+      if (dailyDeficit <= 0) return null;
+      final days = (kgToLose * kcalPerKgBodyWeight) / dailyDeficit;
+      return days.round().clamp(1, 365 * 2); // cap for display sanity
+    }
+
+    // gain
+    final kgToGain = targetWeightKg.toDouble() - currentWeightKg.toDouble();
+    if (kgToGain <= 0) return null;
+    final dailySurplus = targetCaloriesPerDay - tdeeValue;
+    if (dailySurplus <= 0) return null;
+    final days = (kgToGain * kcalPerKgBodyWeight) / dailySurplus;
+    return days.round().clamp(1, 365 * 2);
+  }
+
   /// Full calculation: TDEE → target calories → macros
   static Map<String, double> calculateDailyTargets({
     required num weightKg,

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../core/theme.dart';
+import '../../core/token_storage.dart';
+import '../auth/login_page.dart';
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  final bool visible;
+
+  const SettingsPage({Key? key, this.visible = false}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -90,7 +94,15 @@ class SettingsPage extends StatelessWidget {
           const SizedBox(height: 32),
           Center(
             child: TextButton(
-              onPressed: () {},
+              onPressed: () async {
+                await TokenStorage.clearTokens();
+                if (context.mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginPage()),
+                    (route) => false,
+                  );
+                }
+              },
               child: const Text(
                 'Log Out',
                 style: TextStyle(

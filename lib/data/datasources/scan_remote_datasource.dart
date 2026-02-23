@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../core/constants.dart';
+import '../../core/scan_image_compress.dart';
 import '../../core/token_storage.dart';
 import '../models/api_response.dart';
 import '../models/api_models.dart';
@@ -25,16 +26,24 @@ class ScanRemoteDataSource {
     try {
       final request = http.MultipartRequest('POST', url);
 
-      // Add Authorization Header manually
       final token = await TokenStorage.getAccessToken();
       if (token != null) {
         request.headers['Authorization'] = 'Bearer $token';
       }
 
-      // Inject image file
-      request.files.add(
-        await http.MultipartFile.fromPath('image', imageFile.path),
-      );
+      // Compress image before upload (resize + JPEG) to reduce size and upload time
+      final compressed = await compressImageForScan(imageFile.path);
+      if (compressed != null && compressed.isNotEmpty) {
+        request.files.add(http.MultipartFile.fromBytes(
+          'image',
+          compressed,
+          filename: 'image.jpg',
+        ));
+      } else {
+        request.files.add(
+          await http.MultipartFile.fromPath('image', imageFile.path),
+        );
+      }
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
