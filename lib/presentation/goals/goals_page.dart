@@ -115,8 +115,8 @@ class _GoalsPageState extends State<GoalsPage> {
       final p = res.data!;
       _profile = p;
       _weightGoal = p.weightGoal ?? 'maintain';
-      _targetWeightKg = p.targetWeightKg ?? 75;
       _weightKg = p.weightKg ?? 70;
+      _targetWeightKg = (_weightGoal == 'maintain') ? _weightKg : (p.targetWeightKg ?? 75);
       _heightCm = p.heightCm ?? 170;
       _age = p.age ?? 25;
       _activityLevel = p.activityLevel ?? 'moderate';
@@ -178,7 +178,7 @@ class _GoalsPageState extends State<GoalsPage> {
 
     final body = <String, dynamic>{
       'weight_goal': _weightGoal,
-      'target_weight_kg': _targetWeightKg,
+      'target_weight_kg': _weightGoal == 'maintain' ? _weightKg : _targetWeightKg,
       'activity_level': _activityLevel,
       'weight_kg': _weightKg,
       'height_cm': _heightCm,
@@ -921,6 +921,10 @@ class _GoalsPageState extends State<GoalsPage> {
         onTap: () {
           setState(() {
             _weightGoal = value;
+            if (value == 'maintain') {
+              _targetWeightKg = _weightKg;
+              _targetWeightController.text = _weightKg.toString();
+            }
             _onWeightGoalOrActivityChanged();
           });
         },

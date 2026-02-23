@@ -58,11 +58,12 @@ class _RegisterPageState extends State<RegisterPage> {
   void initState() {
     super.initState();
     _passwordController.addListener(_validatePassword);
-    
-    _targetWeightController = TextEditingController(text: '75');
+
+    _targetWeightController = TextEditingController(text: '70');
     _ageController = TextEditingController(text: '25');
     _heightController = TextEditingController(text: '170');
     _weightController = TextEditingController(text: '70');
+    _targetWeightKg = 70;
 
     _recalculateTargets();
   }
@@ -114,7 +115,8 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() {});
   }
 
-  void _nextStep() {
+  /// Returns true if step 1 fields are valid.
+  bool _validateStep1() {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -127,15 +129,14 @@ class _RegisterPageState extends State<RegisterPage> {
           backgroundColor: Colors.red,
         ),
       );
-      return;
+      return false;
     }
 
     setState(() {
       _hasTouchedPassword = true;
     });
     _validatePassword();
-
-    if (_passwordError != null) return;
+    if (_passwordError != null) return false;
 
     if (password != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -144,17 +145,14 @@ class _RegisterPageState extends State<RegisterPage> {
           backgroundColor: Colors.red,
         ),
       );
-      return;
+      return false;
     }
-
-    setState(() {
-      _currentStep = 2;
-    });
+    return true;
   }
 
-  Future<void> _handleRegister() async {
-    // Only allow actual registration from step 2 (goals step).
-    if (_currentStep != 2) return;
+  /// Step 1: Create account via API; only go to step 2 on success.
+  Future<void> _createAccountAndGoToStep2() async {
+    if (!_validateStep1()) return;
 
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -172,9 +170,11 @@ class _RegisterPageState extends State<RegisterPage> {
       passwordConfirm: confirmPassword,
     );
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
 
     if (response.success && response.data != null) {
       await TokenStorage.saveTokens(
@@ -182,85 +182,33 @@ class _RegisterPageState extends State<RegisterPage> {
         response.data!.refreshToken,
         userId: response.data!.user.id,
       );
-
-      final userId = response.data!.user.id;
-      final body = <String, dynamic>{
-        'weight_goal': _weightGoal,
-        'target_weight_kg': _targetWeightKg,
-        'activity_level': _activityLevel,
-        'weight_kg': _weightKg,
-        'height_cm': _heightCm,
-        'age': _age,
-        'gender': _gender,
-      };
-
-      final profileRes = await _profileDataSource.updateProfile(userId, body);
-
-      if (!mounted) return;
       setState(() {
-        _isLoading = false;
+        _currentStep = 2;
       });
-
-      if (profileRes.statusCode == 401) {
-        await TokenStorage.clearTokens();
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const LoginPage()),
-            (route) => false,
-          );
-        }
-        return;
-      }
-
-      if (!profileRes.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(profileRes.message),
-            backgroundColor: AppTheme.redAccent,
-          ),
-        );
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration successful!')));
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainWrapper()),
-        );
-      }
     } else {
-      setState(() {
-        _isLoading = false;
-        _currentStep = 1;
-      });
-
       String errorMsg = response.readableErrorMessage;
       if (response.error is Map) {
-         final errorMap = response.error as Map;
-         if (errorMap.containsKey('detail') && errorMap['detail'] is Map) {
-             final detailMap = errorMap['detail'] as Map;
-             List<String> messages = [];
-             detailMap.forEach((key, value) {
-               String fieldName = key.toString();
-               if (fieldName.isNotEmpty) {
-                 fieldName = fieldName[0].toUpperCase() + fieldName.substring(1);
-               }
-               fieldName = fieldName.replaceAll('_', ' ');
+        final errorMap = response.error as Map;
+        if (errorMap.containsKey('detail') && errorMap['detail'] is Map) {
+          final detailMap = errorMap['detail'] as Map;
+          List<String> messages = [];
+          detailMap.forEach((key, value) {
+            String fieldName = key.toString();
+            if (fieldName.isNotEmpty) {
+              fieldName = fieldName[0].toUpperCase() + fieldName.substring(1);
+            }
+            fieldName = fieldName.replaceAll('_', ' ');
 
-               if (value is List) {
-                 //", ".join([str(v) for v in value])}' if isinstance(value, list) else f'{fieldName}: {value}') # pseudo python list comprehension bug protection, wait, this is Dart generation!
-                                  messages.add('${fieldName}: ${value.join(', ')}');
-                 messages.add('${fieldName}: ${value.join(', ')}');
-               } else {
-                 messages.add('${fieldName}: ${value}');
-               }
-             });
-             if (messages.isNotEmpty) {
-               errorMsg = messages.join('\n');
-             }
-         }
+            if (value is List) {
+              messages.add('${fieldName}: ${value.join(', ')}');
+            } else {
+              messages.add('${fieldName}: ${value}');
+            }
+          });
+          if (messages.isNotEmpty) {
+            errorMsg = messages.join('\n');
+          }
+        }
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -271,6 +219,73 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
           backgroundColor: Colors.red,
         ),
+      );
+    }
+  }
+
+  /// Step 2: Save goals (profile). Account already created in step 1.
+  Future<void> _handleRegister() async {
+    if (_currentStep != 2) return;
+
+    final userId = await TokenStorage.getUserId();
+    if (userId == null || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Session expired. Please sign in again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    final body = <String, dynamic>{
+      'weight_goal': _weightGoal,
+      'target_weight_kg': _weightGoal == 'maintain' ? _weightKg : _targetWeightKg,
+      'activity_level': _activityLevel,
+      'weight_kg': _weightKg,
+      'height_cm': _heightCm,
+      'age': _age,
+      'gender': _gender,
+    };
+
+    final profileRes = await _profileDataSource.updateProfile(userId, body);
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (profileRes.statusCode == 401) {
+      await TokenStorage.clearTokens();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+          (route) => false,
+        );
+      }
+      return;
+    }
+
+    if (!profileRes.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(profileRes.message),
+          backgroundColor: AppTheme.redAccent,
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registration successful!')));
+
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainWrapper()),
       );
     }
   }
@@ -462,7 +477,7 @@ class _RegisterPageState extends State<RegisterPage> {
             SizedBox(
               height: 56,
               child: ElevatedButton(
-                onPressed: _nextStep,
+                onPressed: _isLoading ? null : _createAccountAndGoToStep2,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   shape: RoundedRectangleBorder(
@@ -470,14 +485,23 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Next',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'Next',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 24),
@@ -1094,103 +1118,105 @@ Widget _buildWeightGoalCard() {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppTheme.cardColor,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Target Weight',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textBlack,
+        if (_weightGoal != 'maintain') ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.cardColor,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
                 ),
-              ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.remove_circle_outline,
-                      color: AppTheme.textGrey,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        if (_targetWeightKg > 30) {
-                          _targetWeightKg = _targetWeightKg - 1;
-                          _targetWeightController.text = _targetWeightKg
-                              .toString();
-                          _onGoalOrActivityChanged();
-                        }
-                      });
-                    },
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Target Weight',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textBlack,
                   ),
-                  SizedBox(
-                    width: 48,
-                    child: TextField(
-                      controller: _targetWeightController,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textBlack,
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: AppTheme.textGrey,
                       ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onChanged: (val) {
-                        final parsed = num.tryParse(val);
-                        if (parsed != null) {
-                          setState(() {
-                            _targetWeightKg = parsed.clamp(30, 300);
+                      onPressed: () {
+                        setState(() {
+                          if (_targetWeightKg > 30) {
+                            _targetWeightKg = _targetWeightKg - 1;
+                            _targetWeightController.text = _targetWeightKg
+                                .toString();
                             _onGoalOrActivityChanged();
-                          });
-                        }
+                          }
+                        });
                       },
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'kg',
-                    style: TextStyle(fontSize: 16, color: AppTheme.textGrey),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle_outline,
-                      color: AppTheme.textGrey,
+                    SizedBox(
+                      width: 48,
+                      child: TextField(
+                        controller: _targetWeightController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textBlack,
+                        ),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onChanged: (val) {
+                          final parsed = num.tryParse(val);
+                          if (parsed != null) {
+                            setState(() {
+                              _targetWeightKg = parsed.clamp(30, 300);
+                              _onGoalOrActivityChanged();
+                            });
+                          }
+                        },
+                      ),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        if (_targetWeightKg < 300) {
-                          _targetWeightKg = _targetWeightKg + 1;
-                          _targetWeightController.text = _targetWeightKg
-                              .toString();
-                          _onGoalOrActivityChanged();
-                        }
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 4),
+                    const Text(
+                      'kg',
+                      style: TextStyle(fontSize: 16, color: AppTheme.textGrey),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.add_circle_outline,
+                        color: AppTheme.textGrey,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if (_targetWeightKg < 300) {
+                            _targetWeightKg = _targetWeightKg + 1;
+                            _targetWeightController.text = _targetWeightKg
+                                .toString();
+                            _onGoalOrActivityChanged();
+                          }
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -1202,6 +1228,10 @@ Widget _buildSegment(String value, String title) {
         onTap: () {
           setState(() {
             _weightGoal = value;
+            if (value == 'maintain') {
+              _targetWeightKg = _weightKg;
+              _targetWeightController.text = _weightKg.toString();
+            }
             _onGoalOrActivityChanged();
           });
         },

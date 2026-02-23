@@ -629,12 +629,18 @@ class HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 20),
-          Text(
-            amount,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textBlack,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              amount,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textBlack,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(height: 4),
@@ -806,46 +812,48 @@ class HomePageState extends State<HomePage> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.local_fire_department,
-                            color: AppTheme.redAccent,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${log.calculated['calories']} kcal',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.local_fire_department,
                               color: AppTheme.redAccent,
+                              size: 16,
                             ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          _buildMacroDot(
-                            AppTheme.blueAccent,
-                            '${log.calculated['protein_g']}g',
-                          ),
-                          const SizedBox(width: 8),
-                          _buildMacroDot(
-                            AppTheme.greenAccent,
-                            '${log.calculated['carbs_g']}g',
-                          ),
-                          const SizedBox(width: 8),
-                          _buildMacroDot(
-                            AppTheme.redAccent,
-                            '${log.calculated['fat_g']}g',
-                          ),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(width: 4),
+                            Text(
+                              '${log.calculated['calories']} kcal',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.redAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        _buildMacroDot(
+                          AppTheme.blueAccent,
+                          '${log.calculated['protein_g']}g',
+                        ),
+                        const SizedBox(width: 8),
+                        _buildMacroDot(
+                          AppTheme.greenAccent,
+                          '${log.calculated['carbs_g']}g',
+                        ),
+                        const SizedBox(width: 8),
+                        _buildMacroDot(
+                          AppTheme.redAccent,
+                          '${log.calculated['fat_g']}g',
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
